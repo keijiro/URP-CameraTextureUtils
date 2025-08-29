@@ -1,108 +1,109 @@
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.RenderGraphModule;
-using UnityEngine.Rendering.Universal;
 
 namespace CameraTextureUtils {
 
-sealed class CameraTextureRouterPass : ScriptableRenderPass
+[ExecuteInEditMode]
+[RequireComponent(typeof(Camera))]
+public sealed class CameraTextureRouter : MonoBehaviour
 {
-    class PassData
+    #region Serialized Fields
+
+    [SerializeField] RenderTexture _depthTarget = null;
+    [SerializeField] RenderTexture _motionTarget = null;
+
+    #endregion
+
+    #region Runtime State
+
+    (RTHandle handle, RenderTargetInfo info) _depth;
+    (RTHandle handle, RenderTargetInfo info) _motion;
+
+    #endregion
+
+    #region Public API
+
+    public RenderTexture DepthTarget => _depthTarget;
+    public RenderTexture MotionTarget => _motionTarget;
+    public (RTHandle, RenderTargetInfo) GetDepthTarget() => _depth;
+    public (RTHandle, RenderTargetInfo) GetMotionTarget() => _motion;
+    public bool IsReady => DepthTarget != null && MotionTarget != null;
+
+    #endregion
+
+    #region Public Setters
+
+    public void SetDepthTarget(RenderTexture target)
     {
-        public TextureHandle cameraDepth;
-        public TextureHandle motionVector;
-        public Material material;
+        if (_depthTarget == target) return;
+        _depthTarget = target;
+        UpdateDepthOutput();
     }
 
-    Material _material;
-
-    public CameraTextureRouterPass(Material material)
+    public void SetMotionTarget(RenderTexture target)
     {
-        renderPassEvent = RenderPassEvent.BeforeRenderingPostProcessing;
-        ConfigureInput(ScriptableRenderPassInput.Depth | ScriptableRenderPassInput.Motion);
-
-        _material = material;
+        if (_motionTarget == target) return;
+        _motionTarget = target;
+        UpdateMotionOutput();
     }
 
-    public void Cleanup()
+    #endregion
+
+    #region Unity Lifecycle
+
+    void OnEnable() => UpdateOutputs();
+    void OnDisable() => ReleaseOutputs();
+    void OnDestroy() => ReleaseOutputs();
+    void OnValidate() { ReleaseOutputs(); UpdateOutputs(); }
+
+    #endregion
+
+    #region Internal Helpers
+
+    void UpdateOutputs()
     {
-        _material = null;
+        UpdateDepthOutput();
+        UpdateMotionOutput();
     }
 
-    public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
+    static (RTHandle handle, RenderTargetInfo info) CreateOutput(RenderTexture target, string name)
     {
-        if (_material == null) return;
-
-        // Pull targets from the controller attached to the current camera
-        var cam = frameData.Get<UniversalCameraData>().camera;
-        var controller = cam != null ? cam.GetComponent<CameraTextureRouterController>() : null;
-        if (controller == null || !controller.enabled || !controller.IsReady) return;
-
-        var resrc = frameData.Get<UniversalResourceData>();
-
-        var (depthHandle, depthInfo) = controller.GetDepthTarget();
-        var (motionHandle, motionInfo) = controller.GetMotionTarget();
-        if (depthHandle == null || motionHandle == null) return;
-
-        var out0 = renderGraph.ImportTexture(depthHandle, depthInfo);
-        var out1 = renderGraph.ImportTexture(motionHandle, motionInfo);
-
-        using var builder =
-          renderGraph.AddRasterRenderPass<PassData>
-            ("Camera Texture Router", out var passData);
-
-        builder.UseAllGlobalTextures(true);
-        builder.AllowPassCulling(false);
-
-        passData.material = _material;
-        passData.cameraDepth = resrc.cameraDepthTexture;
-        passData.motionVector = resrc.motionVectorColor;
-
-        builder.UseTexture(passData.cameraDepth, AccessFlags.Read);
-        builder.UseTexture(passData.motionVector, AccessFlags.Read);
-
-        builder.SetRenderAttachment(out0, 0, AccessFlags.Write);
-        builder.SetRenderAttachment(out1, 1, AccessFlags.Write);
-
-        builder.SetRenderFunc<PassData>(ExecutePass);
+        if (target == null) return (null, default);
+        var handle = RTHandles.Alloc(target, name);
+        var info = new RenderTargetInfo
+        {
+            format = target.graphicsFormat,
+            width = target.width,
+            height = target.height,
+            volumeDepth = target.volumeDepth,
+            msaaSamples = 1,
+            bindMS = target.bindTextureMS
+        };
+        return (handle, info);
     }
 
-    static void ExecutePass(PassData data, RasterGraphContext ctx)
+    void UpdateDepthOutput()
     {
-        data.material.SetTexture("_CameraDepthTexture", data.cameraDepth);
-        data.material.SetTexture("_MotionVectorTexture", data.motionVector);
-        ctx.cmd.DrawProcedural(Matrix4x4.identity, data.material, 0, MeshTopology.Triangles, 3);
-    }
-}
-
-public sealed class CameraTextureRouter : ScriptableRendererFeature
-{
-    [SerializeField, HideInInspector] Shader _shader = null;
-
-    Material _material;
-    CameraTextureRouterPass _pass;
-
-    void OnValidate()
-    {
-        OnDestroy();
-        Create();
+        _depth.handle?.Release();
+        _depth = CreateOutput(_depthTarget, "DepthOutput");
     }
 
-    void OnDestroy()
+    void UpdateMotionOutput()
     {
-        _pass?.Cleanup();
-        if (_material != null) CoreUtils.Destroy(_material);
-        (_material, _pass) = (null, null);
+        _motion.handle?.Release();
+        _motion = CreateOutput(_motionTarget, "MotionOutput");
     }
 
-    public override void Create()
+    void ReleaseOutputs()
     {
-        _material = CoreUtils.CreateEngineMaterial(_shader);
-        _pass = new CameraTextureRouterPass(_material);
+        _depth.handle?.Release();
+        _depth = (null, default);
+        _motion.handle?.Release();
+        _motion = (null, default);
     }
 
-    public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData data)
-      => renderer.EnqueuePass(_pass);
+    #endregion
 }
 
 } // namespace CameraTextureUtils
