@@ -19,6 +19,11 @@ Shader "Hidden/URP/CameraTextureRouter"
 
             TEXTURE2D_X(_MotionVectorTexture);
 
+            CBUFFER_START(UnityPerMaterial)
+            int _DepthEncoding;   // 0: RawBuffer, 1: Linear01, 2: LinearEye
+            int _MotionEncoding;  // 0: Signed, 1: Centered01
+            CBUFFER_END
+
             struct Attributes
             {
                 uint vertexID : SV_VertexID;
@@ -51,9 +56,28 @@ Shader "Hidden/URP/CameraTextureRouter"
             {
                 MRT o;
                 float rawDepth = SampleSceneDepth(i.uv);
+
+                // Depth encoding selection
+                float depthOut = rawDepth;
+                if (_DepthEncoding == 1)
+                {
+                    depthOut = Linear01Depth(rawDepth, _ZBufferParams);
+                }
+                else if (_DepthEncoding == 2)
+                {
+                    depthOut = LinearEyeDepth(rawDepth, _ZBufferParams);
+                }
+
+                // Motion encoding selection
                 float2 motion = SAMPLE_TEXTURE2D_X_LOD(_MotionVectorTexture, sampler_LinearClamp, i.uv, 0).xy;
-                o.depth = float4(rawDepth, rawDepth, rawDepth, 1);
-                o.motion = float4(motion, 0, 1);
+                float2 motionOut = motion;
+                if (_MotionEncoding == 1)
+                {
+                    motionOut = saturate(motion * 0.5 + 0.5);
+                }
+
+                o.depth = float4(depthOut, depthOut, depthOut, 1);
+                o.motion = float4(motionOut, 0, 1);
                 return o;
             }
 

@@ -761,6 +761,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _depthTarget: {fileID: 8400000, guid: c92350a7302664b97ab39f5017fa8fee, type: 2}
   _motionTarget: {fileID: 8400000, guid: 55a167cba70ec496297c5d77afe1fa4d, type: 2}
+  _depthEncoding: 0
+  _motionEncoding: 0
 --- !u!1 &1602446955
 GameObject:
   m_ObjectHideFlags: 0

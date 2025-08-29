@@ -10,8 +10,29 @@ public sealed class CameraTextureRouter : MonoBehaviour
 {
     #region Serialized Fields
 
+    public enum DepthEncoding { RawBuffer = 0, Linear01 = 1, LinearEye = 2 }
+    public enum MotionEncoding { Signed = 0, Centered01 = 1 }
+
     [SerializeField] RenderTexture _depthTarget = null;
     [SerializeField] RenderTexture _motionTarget = null;
+
+    [SerializeField] DepthEncoding _depthEncoding = DepthEncoding.RawBuffer;
+    [SerializeField] MotionEncoding _motionEncoding = MotionEncoding.Signed;
+
+    #endregion
+
+    #region Public API
+
+    public RenderTexture DepthTarget { get => _depthTarget; set => SetDepthTarget(value); }
+    public RenderTexture MotionTarget { get => _motionTarget; set => SetMotionTarget(value); }
+
+    public (RTHandle, RenderTargetInfo) DepthOutput => _depth;
+    public (RTHandle, RenderTargetInfo) MotionOutput => _motion;
+
+    public bool IsReady => DepthTarget != null && MotionTarget != null;
+
+    public DepthEncoding GetDepthEncoding() => _depthEncoding;
+    public MotionEncoding GetMotionEncoding() => _motionEncoding;
 
     #endregion
 
@@ -22,30 +43,32 @@ public sealed class CameraTextureRouter : MonoBehaviour
 
     #endregion
 
-    #region Public API
+    #region Property Setters
 
-    public RenderTexture DepthTarget => _depthTarget;
-    public RenderTexture MotionTarget => _motionTarget;
-    public (RTHandle, RenderTargetInfo) GetDepthTarget() => _depth;
-    public (RTHandle, RenderTargetInfo) GetMotionTarget() => _motion;
-    public bool IsReady => DepthTarget != null && MotionTarget != null;
-
-    #endregion
-
-    #region Public Setters
-
-    public void SetDepthTarget(RenderTexture target)
+    void SetDepthTarget(RenderTexture target)
     {
         if (_depthTarget == target) return;
         _depthTarget = target;
         UpdateDepthOutput();
     }
 
-    public void SetMotionTarget(RenderTexture target)
+    void SetMotionTarget(RenderTexture target)
     {
         if (_motionTarget == target) return;
         _motionTarget = target;
         UpdateMotionOutput();
+    }
+
+    void UpdateDepthOutput()
+    {
+        _depth.handle?.Release();
+        _depth = CreateOutput(_depthTarget, "DepthOutput");
+    }
+
+    void UpdateMotionOutput()
+    {
+        _motion.handle?.Release();
+        _motion = CreateOutput(_motionTarget, "MotionOutput");
     }
 
     #endregion
@@ -67,7 +90,16 @@ public sealed class CameraTextureRouter : MonoBehaviour
         UpdateMotionOutput();
     }
 
-    static (RTHandle handle, RenderTargetInfo info) CreateOutput(RenderTexture target, string name)
+    void ReleaseOutputs()
+    {
+        _depth.handle?.Release();
+        _depth = (null, default);
+        _motion.handle?.Release();
+        _motion = (null, default);
+    }
+
+    static (RTHandle handle, RenderTargetInfo info)
+      CreateOutput(RenderTexture target, string name)
     {
         if (target == null) return (null, default);
         var handle = RTHandles.Alloc(target, name);
@@ -81,26 +113,6 @@ public sealed class CameraTextureRouter : MonoBehaviour
             bindMS = target.bindTextureMS
         };
         return (handle, info);
-    }
-
-    void UpdateDepthOutput()
-    {
-        _depth.handle?.Release();
-        _depth = CreateOutput(_depthTarget, "DepthOutput");
-    }
-
-    void UpdateMotionOutput()
-    {
-        _motion.handle?.Release();
-        _motion = CreateOutput(_motionTarget, "MotionOutput");
-    }
-
-    void ReleaseOutputs()
-    {
-        _depth.handle?.Release();
-        _depth = (null, default);
-        _motion.handle?.Release();
-        _motion = (null, default);
     }
 
     #endregion

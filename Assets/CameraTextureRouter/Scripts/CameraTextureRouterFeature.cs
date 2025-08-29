@@ -12,6 +12,8 @@ sealed class CameraTextureRouterPass : ScriptableRenderPass
         public TextureHandle cameraDepth;
         public TextureHandle motionVector;
         public Material material;
+        public int depthEncoding;
+        public int motionEncoding;
     }
 
     Material _material;
@@ -40,8 +42,8 @@ sealed class CameraTextureRouterPass : ScriptableRenderPass
 
         var resrc = frameData.Get<UniversalResourceData>();
 
-        var (depthHandle, depthInfo) = controller.GetDepthTarget();
-        var (motionHandle, motionInfo) = controller.GetMotionTarget();
+        var (depthHandle, depthInfo) = controller.DepthOutput;
+        var (motionHandle, motionInfo) = controller.MotionOutput;
         if (depthHandle == null || motionHandle == null) return;
 
         var out0 = renderGraph.ImportTexture(depthHandle, depthInfo);
@@ -57,6 +59,8 @@ sealed class CameraTextureRouterPass : ScriptableRenderPass
         passData.material = _material;
         passData.cameraDepth = resrc.cameraDepthTexture;
         passData.motionVector = resrc.motionVectorColor;
+        passData.depthEncoding = (int)controller.GetDepthEncoding();
+        passData.motionEncoding = (int)controller.GetMotionEncoding();
 
         builder.UseTexture(passData.cameraDepth, AccessFlags.Read);
         builder.UseTexture(passData.motionVector, AccessFlags.Read);
@@ -69,6 +73,8 @@ sealed class CameraTextureRouterPass : ScriptableRenderPass
 
     static void ExecutePass(PassData data, RasterGraphContext ctx)
     {
+        data.material.SetInt("_DepthEncoding", data.depthEncoding);
+        data.material.SetInt("_MotionEncoding", data.motionEncoding);
         data.material.SetTexture("_CameraDepthTexture", data.cameraDepth);
         data.material.SetTexture("_MotionVectorTexture", data.motionVector);
         ctx.cmd.DrawProcedural(Matrix4x4.identity, data.material, 0, MeshTopology.Triangles, 3);
