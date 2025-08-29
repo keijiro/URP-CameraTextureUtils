@@ -1,5 +1,7 @@
 # URP Camera Texture Utilities
 
+![GIF](https://github.com/user-attachments/assets/398f6c44-1318-4f11-adf2-fafe6d65fbae)
+
 Custom renderer features for Universal Render Pipeline (URP) to handle camera
 textures (depth and motion vectors).
 
