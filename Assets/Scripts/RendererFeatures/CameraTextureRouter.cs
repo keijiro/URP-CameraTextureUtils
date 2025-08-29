@@ -15,56 +15,37 @@ sealed class CameraTextureRouterPass : ScriptableRenderPass
     }
 
     Material _material;
-    (RTHandle handle, RenderTargetInfo info) _depth;
-    (RTHandle handle, RenderTargetInfo info) _motion;
 
-    public CameraTextureRouterPass(Material material,
-                                   RenderTexture depthTarget,
-                                   RenderTexture motionTarget)
+    public CameraTextureRouterPass(Material material)
     {
         renderPassEvent = RenderPassEvent.BeforeRenderingPostProcessing;
         ConfigureInput(ScriptableRenderPassInput.Depth | ScriptableRenderPassInput.Motion);
 
         _material = material;
-        _depth = UpdateOutput(depthTarget, "DepthOutput");
-        _motion = UpdateOutput(motionTarget, "MotionOutput");
     }
 
     public void Cleanup()
     {
         _material = null;
-
-        _depth.handle?.Release();
-        _depth = (null, default);
-
-        _motion.handle?.Release();
-        _motion = (null, default);
-    }
-
-    (RTHandle, RenderTargetInfo) UpdateOutput(RenderTexture src, string name)
-    {
-        var handle = RTHandles.Alloc(src, name);
-        var info = new RenderTargetInfo
-        {
-            format = src.graphicsFormat,
-            width = src.width,
-            height = src.height,
-            volumeDepth = src.volumeDepth,
-            msaaSamples = 1,
-            bindMS = src.bindTextureMS
-        };
-        return (handle, info);
     }
 
     public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
     {
         if (_material == null) return;
-        if (_depth.handle == null || _motion.handle == null) return;
+
+        // Pull targets from the controller attached to the current camera
+        var cam = frameData.Get<UniversalCameraData>().camera;
+        var controller = cam != null ? cam.GetComponent<CameraTextureRouterController>() : null;
+        if (controller == null || !controller.enabled || !controller.IsReady) return;
 
         var resrc = frameData.Get<UniversalResourceData>();
 
-        var out0 = renderGraph.ImportTexture(_depth.handle, _depth.info);
-        var out1 = renderGraph.ImportTexture(_motion.handle, _motion.info);
+        var (depthHandle, depthInfo) = controller.GetDepthTarget();
+        var (motionHandle, motionInfo) = controller.GetMotionTarget();
+        if (depthHandle == null || motionHandle == null) return;
+
+        var out0 = renderGraph.ImportTexture(depthHandle, depthInfo);
+        var out1 = renderGraph.ImportTexture(motionHandle, motionInfo);
 
         using var builder =
           renderGraph.AddRasterRenderPass<PassData>
@@ -96,9 +77,6 @@ sealed class CameraTextureRouterPass : ScriptableRenderPass
 
 public sealed class CameraTextureRouter : ScriptableRendererFeature
 {
-    [SerializeField] RenderTexture _depthTarget = null;
-    [SerializeField] RenderTexture _motionTarget = null;
-
     [SerializeField, HideInInspector] Shader _shader = null;
 
     Material _material;
@@ -120,7 +98,7 @@ public sealed class CameraTextureRouter : ScriptableRendererFeature
     public override void Create()
     {
         _material = CoreUtils.CreateEngineMaterial(_shader);
-        _pass = new CameraTextureRouterPass(_material, _depthTarget, _motionTarget);
+        _pass = new CameraTextureRouterPass(_material);
     }
 
     public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData data)
