@@ -98,12 +98,6 @@ public sealed class CameraTextureRouterFeature : ScriptableRendererFeature
     Material _material;
     CameraTextureRouterPass _pass;
 
-    void OnValidate()
-    {
-        OnDestroy();
-        Create();
-    }
-
     void OnDestroy()
     {
         _pass?.Cleanup();
