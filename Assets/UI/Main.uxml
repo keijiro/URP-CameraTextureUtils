@@ -1,4 +1,4 @@
 <engine:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:engine="UnityEngine.UIElements" xmlns:editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
-    <engine:VisualElement style="position: absolute; right: 20px; bottom: 20px; width: 160px; height: 90px; background-image: url(&quot;project://database/Assets/Motion.renderTexture?fileID=8400000&amp;guid=55a167cba70ec496297c5d77afe1fa4d&amp;type=2#Motion&quot;);" />
-    <engine:VisualElement style="position: absolute; right: 200px; bottom: 20px; width: 160px; height: 90px; background-image: url(&quot;project://database/Assets/Depth.renderTexture?fileID=8400000&amp;guid=c92350a7302664b97ab39f5017fa8fee&amp;type=2#Depth&quot;);" />
+    <engine:VisualElement style="position: absolute; right: 20px; bottom: 20px; width: 160px; height: 90px; background-image: url(&quot;project://database/Assets/Test/Motion.renderTexture?fileID=8400000&amp;guid=55a167cba70ec496297c5d77afe1fa4d&amp;type=2#Motion&quot;);" />
+    <engine:VisualElement style="position: absolute; right: 200px; bottom: 20px; width: 160px; height: 90px; background-image: url(&quot;project://database/Assets/Test/Depth.renderTexture?fileID=8400000&amp;guid=c92350a7302664b97ab39f5017fa8fee&amp;type=2#Depth&quot;);" />
 </engine:UXML>
