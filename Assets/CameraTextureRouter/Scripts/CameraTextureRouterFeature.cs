@@ -7,6 +7,7 @@ namespace CameraTextureUtils {
 
 sealed class CameraTextureRouterPass : ScriptableRenderPass
 {
+    // Per-pass data transferred to the render function
     class PassData
     {
         public TextureHandle cameraDepth;
@@ -14,6 +15,7 @@ sealed class CameraTextureRouterPass : ScriptableRenderPass
         public Material material;
         public int depthEncoding;
         public int motionEncoding;
+        public int passIndex; // 0=Depth, 1=Motion, 2=MRT
     }
 
     Material _material;
@@ -27,46 +29,54 @@ sealed class CameraTextureRouterPass : ScriptableRenderPass
     }
 
     public void Cleanup()
-    {
-        _material = null;
-    }
+      => _material = null;
 
-    public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
+    public override void RecordRenderGraph(RenderGraph graph, ContextContainer frameData)
     {
         if (_material == null) return;
 
-        // Pull targets from the controller attached to the current camera
+        // Fetch targets/encoding from the per-camera component
         var cam = frameData.Get<UniversalCameraData>().camera;
         var controller = cam != null ? cam.GetComponent<CameraTextureRouter>() : null;
         if (controller == null || !controller.enabled || !controller.IsReady) return;
 
         var resrc = frameData.Get<UniversalResourceData>();
-
         var (depthHandle, depthInfo) = controller.DepthOutput;
         var (motionHandle, motionInfo) = controller.MotionOutput;
-        if (depthHandle == null || motionHandle == null) return;
 
-        var out0 = renderGraph.ImportTexture(depthHandle, depthInfo);
-        var out1 = renderGraph.ImportTexture(motionHandle, motionInfo);
+        // Start a raster pass and attach 1 or 2 color targets depending on availability
+        using var builder = graph.AddRasterRenderPass<PassData>("Camera Texture Router", out var passData);
 
-        using var builder =
-          renderGraph.AddRasterRenderPass<PassData>
-            ("Camera Texture Router", out var passData);
+        var (passNum, targetIndex) = (0, 0);
 
-        builder.UseAllGlobalTextures(true);
-        builder.AllowPassCulling(false);
+        // Depth output (optional)
+        if (depthHandle != null)
+        {
+            var src = resrc.cameraDepthTexture;
+            var dest = graph.ImportTexture(depthHandle, depthInfo);
+            passNum |= 1;
+
+            passData.cameraDepth = src;
+            builder.UseTexture(src, AccessFlags.Read);
+            builder.SetRenderAttachment(dest, targetIndex++, AccessFlags.Write);
+        }
+
+        // Motion output (optional)
+        if (motionHandle != null)
+        {
+            var src = resrc.motionVectorColor;
+            var dest = graph.ImportTexture(motionHandle, motionInfo);
+            passNum |= 2;
+
+            passData.motionVector = src;
+            builder.UseTexture(src, AccessFlags.Read);
+            builder.SetRenderAttachment(dest, targetIndex++, AccessFlags.Write);
+        }
 
         passData.material = _material;
-        passData.cameraDepth = resrc.cameraDepthTexture;
-        passData.motionVector = resrc.motionVectorColor;
         passData.depthEncoding = (int)controller.GetDepthEncoding();
         passData.motionEncoding = (int)controller.GetMotionEncoding();
-
-        builder.UseTexture(passData.cameraDepth, AccessFlags.Read);
-        builder.UseTexture(passData.motionVector, AccessFlags.Read);
-
-        builder.SetRenderAttachment(out0, 0, AccessFlags.Write);
-        builder.SetRenderAttachment(out1, 1, AccessFlags.Write);
+        passData.passIndex = passNum - 1; // Map bitmask to pass index
 
         builder.SetRenderFunc<PassData>(ExecutePass);
     }
@@ -77,7 +87,7 @@ sealed class CameraTextureRouterPass : ScriptableRenderPass
         data.material.SetInt("_MotionEncoding", data.motionEncoding);
         data.material.SetTexture("_CameraDepthTexture", data.cameraDepth);
         data.material.SetTexture("_MotionVectorTexture", data.motionVector);
-        ctx.cmd.DrawProcedural(Matrix4x4.identity, data.material, 0, MeshTopology.Triangles, 3);
+        CoreUtils.DrawFullScreen(ctx.cmd, data.material, null, data.passIndex);
     }
 }
 

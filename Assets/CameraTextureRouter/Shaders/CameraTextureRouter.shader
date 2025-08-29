@@ -5,6 +5,90 @@ Shader "Hidden/URP/CameraTextureRouter"
         Tags { "RenderType"="Opaque" "RenderPipeline"="UniversalPipeline" }
         ZWrite Off ZTest Always Cull Off
 
+        // Single-target: Depth only
+        Pass
+        {
+            Name "CameraTextureRouter_DepthOnly"
+
+            HLSLPROGRAM
+            #pragma vertex Vert
+            #pragma fragment FragDepthOnly
+            #pragma target 4.5
+
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
+
+            TEXTURE2D_X(_MotionVectorTexture);
+
+            CBUFFER_START(UnityPerMaterial)
+            int _DepthEncoding;   // 0: RawDepth, 1: Linear01, 2: LinearEye
+            int _MotionEncoding;  // unused here
+            CBUFFER_END
+
+            struct Attributes { uint vertexID : SV_VertexID; };
+            struct Varyings { float4 positionCS : SV_Position; float2 uv : TEXCOORD0; };
+
+            Varyings Vert(Attributes v)
+            {
+                Varyings o;
+                o.positionCS = GetFullScreenTriangleVertexPosition(v.vertexID);
+                o.uv = GetFullScreenTriangleTexCoord(v.vertexID);
+                return o;
+            }
+
+            float4 FragDepthOnly(Varyings i) : SV_Target
+            {
+                float rawDepth = SampleSceneDepth(i.uv);
+                float depthOut = rawDepth;
+                if (_DepthEncoding == 1) depthOut = Linear01Depth(rawDepth, _ZBufferParams);
+                else if (_DepthEncoding == 2) depthOut = LinearEyeDepth(rawDepth, _ZBufferParams);
+                return float4(depthOut, depthOut, depthOut, 1);
+            }
+
+            ENDHLSL
+        }
+
+        // Single-target: Motion only
+        Pass
+        {
+            Name "CameraTextureRouter_MotionOnly"
+
+            HLSLPROGRAM
+            #pragma vertex Vert
+            #pragma fragment FragMotionOnly
+            #pragma target 4.5
+
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
+
+            TEXTURE2D_X(_MotionVectorTexture);
+
+            CBUFFER_START(UnityPerMaterial)
+            int _DepthEncoding;   // unused here
+            int _MotionEncoding;  // 0: Signed, 1: Centered01
+            CBUFFER_END
+
+            struct Attributes { uint vertexID : SV_VertexID; };
+            struct Varyings { float4 positionCS : SV_Position; float2 uv : TEXCOORD0; };
+
+            Varyings Vert(Attributes v)
+            {
+                Varyings o;
+                o.positionCS = GetFullScreenTriangleVertexPosition(v.vertexID);
+                o.uv = GetFullScreenTriangleTexCoord(v.vertexID);
+                return o;
+            }
+
+            float4 FragMotionOnly(Varyings i) : SV_Target
+            {
+                float2 motion = SAMPLE_TEXTURE2D_X_LOD(_MotionVectorTexture, sampler_LinearClamp, i.uv, 0).xy;
+                if (_MotionEncoding == 1) motion = saturate(motion * 0.5 + 0.5);
+                return float4(motion, 0, 1);
+            }
+
+            ENDHLSL
+        }
+
         Pass
         {
             Name "CameraTextureRouter"

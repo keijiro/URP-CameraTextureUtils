@@ -29,7 +29,7 @@ public sealed class CameraTextureRouter : MonoBehaviour
     public (RTHandle, RenderTargetInfo) DepthOutput => _depth;
     public (RTHandle, RenderTargetInfo) MotionOutput => _motion;
 
-    public bool IsReady => DepthTarget != null && MotionTarget != null;
+    public bool IsReady => DepthTarget != null || MotionTarget != null;
 
     public DepthEncoding GetDepthEncoding() => _depthEncoding;
     public MotionEncoding GetMotionEncoding() => _motionEncoding;
